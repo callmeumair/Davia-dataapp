@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Davia Data App{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title mb-4">
+                    <i class="fas fa-chart-line text-primary me-2"></i>
+                    Data Dashboard
+                </h2>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="card bg-primary text-white mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Total Data Points</h5>
+                                <h2 class="card-text" id="totalPoints">Loading...</h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-success text-white mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Average Value</h5>
+                                <h2 class="card-text" id="avgValue">Loading...</h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-info text-white mb-3">
+                            <div class="card-body">
+                                <h5 class="card-title">Categories</h5>
+                                <h2 class="card-text" id="categoryCount">Loading...</h2>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Data Visualization</h5>
+                <canvas id="mainChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Data Analysis</h5>
+                <div class="list-group">
+                    <div class="list-group-item">
+                        <h6 class="mb-1">Maximum Value</h6>
+                        <p class="mb-0" id="maxValue">Loading...</p>
+                    </div>
+                    <div class="list-group-item">
+                        <h6 class="mb-1">Minimum Value</h6>
+                        <p class="mb-0" id="minValue">Loading...</p>
+                    </div>
+                    <div class="list-group-item">
+                        <h6 class="mb-1">Categories</h6>
+                        <p class="mb-0" id="categories">Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">Data Controls</h5>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="dateRange" class="form-label">Date Range</label>
+                            <select class="form-select" id="dateRange">
+                                <option value="7">Last 7 days</option>
+                                <option value="30">Last 30 days</option>
+                                <option value="90">Last 90 days</option>
+                                <option value="365" selected>Last year</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="categoryFilter" class="form-label">Category Filter</label>
+                            <select class="form-select" id="categoryFilter">
+                                <option value="all" selected>All Categories</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label class="form-label">Actions</label>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-primary" id="refreshData">
+                                    <i class="fas fa-sync-alt me-1"></i> Refresh Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize the dashboard
+    initializeDashboard();
+    
+    // Set up event listeners
+    document.getElementById('dateRange').addEventListener('change', updateVisualization);
+    document.getElementById('categoryFilter').addEventListener('change', updateVisualization);
+    document.getElementById('refreshData').addEventListener('click', initializeDashboard);
+});
+
+function initializeDashboard() {
+    fetch('/api/data')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                updateDashboard(data.data);
+                updateVisualization();
+            }
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+function updateDashboard(data) {
+    // Update summary cards
+    document.getElementById('totalPoints').textContent = data.values.length;
+    
+    // Calculate and update average
+    const avg = data.values.reduce((a, b) => a + b, 0) / data.values.length;
+    document.getElementById('avgValue').textContent = avg.toFixed(2);
+    
+    // Update category count
+    const uniqueCategories = new Set(data.categories);
+    document.getElementById('categoryCount').textContent = uniqueCategories.size;
+    
+    // Update category filter options
+    const categoryFilter = document.getElementById('categoryFilter');
+    categoryFilter.innerHTML = '<option value="all" selected>All Categories</option>';
+    uniqueCategories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        categoryFilter.appendChild(option);
+    });
+}
+
+function updateVisualization() {
+    fetch('/api/data')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                const dateRange = document.getElementById('dateRange').value;
+                const categoryFilter = document.getElementById('categoryFilter').value;
+                
+                // Filter data based on selections
+                let filteredData = filterData(data.data, dateRange, categoryFilter);
+                
+                // Update chart
+                updateChart(filteredData);
+                
+                // Update analysis
+                updateAnalysis(filteredData);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+function filterData(data, dateRange, category) {
+    const now = new Date();
+    const rangeStart = new Date(now - dateRange * 24 * 60 * 60 * 1000);
+    
+    return {
+        dates: data.dates.filter((date, i) => {
+            const dateObj = new Date(date);
+            return dateObj >= rangeStart && 
+                   (category === 'all' || data.categories[i] === category);
+        }),
+        values: data.values.filter((value, i) => {
+            const dateObj = new Date(data.dates[i]);
+            return dateObj >= rangeStart && 
+                   (category === 'all' || data.categories[i] === category);
+        }),
+        categories: data.categories.filter((cat, i) => {
+            const dateObj = new Date(data.dates[i]);
+            return dateObj >= rangeStart && 
+                   (category === 'all' || cat === category);
+        })
+    };
+}
+
+function updateChart(data) {
+    const ctx = document.getElementById('mainChart').getContext('2d');
+    
+    if (window.mainChart) {
+        window.mainChart.destroy();
+    }
+    
+    window.mainChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.dates,
+            datasets: [{
+                label: 'Value',
+                data: data.values,
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1,
+                fill: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                },
+                title: {
+                    display: true,
+                    text: 'Data Visualization'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+function updateAnalysis(data) {
+    const values = data.values;
+    const categories = new Set(data.categories);
+    
+    document.getElementById('maxValue').textContent = Math.max(...values).toFixed(2);
+    document.getElementById('minValue').textContent = Math.min(...values).toFixed(2);
+    document.getElementById('categories').textContent = Array.from(categories).join(', ');
+}
+</script>
+{% endblock %} 
